@@ -5,10 +5,13 @@ library(tidyverse)
 library(sf)
 library(here)
 
-# read simple features from files
 
 #this file doesn't open
 hcsa_0083 <- st_read(dsn = here("data/hcsa_0083/hcsa_digitization.gdb"))
+
+#this one does
+gdb <- "remote/3_digitization/2022_digitization/hcsa_0083/hcsa_digitization.gdb"
+fc <- st_read(gdb, layer = 'concession_boundaries') # Since geodatabase contains multiple layers, need to specify which one you want to open
 
 #this sample gdb from https://gisdata-piercecowa.opendata.arcgis.com/datasets/piercecowa::development-engineering-mobile-homes/explore opens
 sample_gdb <- st_read(dsn = here("data/sample_gdb.gdb"))
