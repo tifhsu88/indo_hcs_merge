@@ -1,26 +1,95 @@
 ## Merge concession and conservation area feature classes in geodatabases
 
-# load packages
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Package imports --------------------------------------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 library(tidyverse)
 library(sf)
-library(here)
 
+# Check if file can open
+hcsa_0083_gdb <- "remote/3_digitization/2022_digitization/hcsa_0083/hcsa_digitization.gdb"
+hcsa_0083_fc <- st_read(hcsa_0083_gdb, layer = 'conservation_areas') # Since geodatabase contains multiple layers, need to specify which one you want to open
 
-#this file doesn't open
-hcsa_0083 <- st_read(dsn = here("data/hcsa_0083/hcsa_digitization.gdb"))
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Define paths -----------------------------------------------------------
+#%%%%%%%%%%%%a%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-#this one does
-gdb <- "remote/3_digitization/2022_digitization/hcsa_0083/hcsa_digitization.gdb"
-fc <- st_read(gdb, layer = 'concession_boundaries') # Since geodatabase contains multiple layers, need to specify which one you want to open
+root_data_dir <- 'remote/3_digitization/2022_digitization/'
+report_list <- c(#'hcsa_0005', # unable to open layer
+                 #'hcsa_0006', # unable to open layer
+                 'hcsa_0034', 
+                 'hcsa_0083', 
+                 'hcsa_0146', 
+                 'hcsa_0152', 
+                 'hcsa_0155', 
+                 # 'hcsa_0157', # no concession boundary or conservation areas digitized
+                 'hcsa_0159', # benise had typed in wrong report file code, manually fixed
+                 'hcsa_0170')
 
-#this sample gdb from https://gisdata-piercecowa.opendata.arcgis.com/datasets/piercecowa::development-engineering-mobile-homes/explore opens
-sample_gdb <- st_read(dsn = here("data/sample_gdb.gdb"))
+# Output path for new, merged dataset
+out_file <- 'remote/4_merging/hcsa_merging/merged_hcs.gpkg'
 
-# # get the list of files in the directory
-# file_list <- list.files(here("insert_directory_here"), pattern = *gdb)
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Open and merge digitized conservation_areas-----------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+r <- report_list[7]
+conservation_areas <- list()
 
-# read files
-# gdb_list <- lapply(file_list, st_read)
+for (i in 1:length(report_list)){
+  r <- report_list[i]
+  gdb <- paste0(root_data_dir, r, "/", 'hcsa_digitization.gdb')
+  fc <- st_read(gdb, layer = 'conservation_areas')
+  conservation_areas[[i]] <- fc
+}
 
-# merge the files into a single dataframe
-#create for loop 
+# turns the list into dataframes
+#conservation_areas_binded <- map_dfr(conservation_areas, rbind)
+
+# separate HCS and HCV columns 
+conservation_areas_binded <- conservation_areas %>%
+  # convert list to dataframe
+  map_dfr(rbind) %>%
+  # separate HCS and HCV columns based on conservation_type
+  mutate(HCS = case_when(
+    conservation_type == "HCV only" ~ "no",
+    conservation_type == "HCS only" ~ "yes",
+    conservation_type == "HCV AND HCS" ~ "yes",
+  )) %>% 
+  mutate(HCV = case_when(
+    conservation_type == "HCV only" ~ "yes",
+    conservation_type == "HCS only" ~ "no",
+    conservation_type == "HCV AND HCS" ~ "yes",
+  )) %>% 
+  # drop conservation_type_column
+  select(-conservation_type)
+  
+# add data to the output file
+merged_map <- conservation_areas_binded %>% 
+  st_write(out_file,
+           layer = "conservation_areas",
+           append = FALSE)
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Open and merge digitized concession_boundaries--------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+r <- report_list[7]
+concession_boundaries <- list()
+
+for (i in 1:length(report_list)){
+  r <- report_list[i]
+  gdb <- paste0(root_data_dir, r, "/", 'hcsa_digitization.gdb')
+  fc <- st_read(gdb, layer = 'concession_boundaries')
+  concession_boundaries[[i]] <- fc
+}
+
+# turns the list into dataframes
+concession_boundaries_binded <- map_dfr(concession_boundaries, rbind)
+
+merged_map <- concession_boundaries_binded %>% 
+  st_write(out_file,
+           layer = "concession_boundaries",
+           append = FALSE)
+
+# Open merged_hcs.gpkg to check the dfs
+#merged_hcs <- st_read(out_file, layer = "concession_boundaries")
+merged_hcs <- st_read(out_file, layer = "conservation_areas")
