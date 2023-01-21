@@ -7,7 +7,7 @@
 library(R.utils)
 
 # Define the path to your local code directory
-code_dir <- "D:/dev/hcs_projects/indo_hcs_merge/"
+code_dir <- "D:/dev/Indonesia/indo_hcs_merge/"
 
 # Define the path to your local google drive Treeconomics\\Data directory 
 data_dir <- "D:/cloud/Dropbox/collaborations/SNAPP_HCS/HCSproject/data/"
