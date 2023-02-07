@@ -6,24 +6,27 @@
 library(tidyverse)
 library(sf)
 
-# Check if file can open
-hcsa_0083_gdb <- "remote/3_digitization/2022_digitization/hcsa_0083/hcsa_digitization.gdb"
-hcsa_0083_fc <- st_read(hcsa_0083_gdb, layer = 'conservation_areas') # Since geodatabase contains multiple layers, need to specify which one you want to open
+# # Check if file can open
+# hcsa_0083_gdb <- "remote/3_digitization/2022_digitization/hcsa_0083/hcsa_digitization.gdb"
+# hcsa_0083_fc <- st_read(hcsa_0083_gdb, layer = 'conservation_areas') # Since geodatabase contains multiple layers, need to specify which one you want to open
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Define paths -----------------------------------------------------------
 #%%%%%%%%%%%%a%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 root_data_dir <- 'remote/3_digitization/2022_digitization/'
 report_list <- c('hcsa_0005',
                  'hcsa_0006',
+                 'hcsa_0008', # Note - some ambiguity between HCS/HCV areas in maps.
+                 'hcsa_0010', # Note - uses HCSA give and take. We digitized pre give-and-take HCS map
                  'hcsa_0011',
                  'hcsa_0012',
                  'hcsa_0013',
                  'hcsa_0014',
+                 # 'hcsa_0015', #
                  'hcsa_0020',
+                 'hcsa_0021',
                  'hcsa_0023',
-                 'hcsa_0024', #needs to be tweaked
+                 'hcsa_0024',
                  'hcsa_0025',
                  'hcsa_0027',
                  'hcsa_0034',
@@ -35,19 +38,6 @@ report_list <- c('hcsa_0005',
                  'hcsa_0170')
 
 
-
-
-#' report_list <- c(#'hcsa_0005', # unable to open layer
-#'                  #'hcsa_0006', # unable to open layer
-#'                  'hcsa_0034', 
-#'                  'hcsa_0083', 
-#'                  'hcsa_0146', 
-#'                  'hcsa_0152', 
-#'                  'hcsa_0155', 
-#'                  # 'hcsa_0157', # no concession boundary or conservation areas digitized
-#'                  'hcsa_0159', # benise had typed in wrong report file code, manually fixed
-#'                  'hcsa_0170')
-
 # Output path for new, merged dataset
 out_file <- 'remote/4_merging/hcsa_merging/merged_hcs.gpkg'
 
@@ -57,12 +47,11 @@ out_file <- 'remote/4_merging/hcsa_merging/merged_hcs.gpkg'
 # r <- report_list[7]
 conservation_areas <- list()
 
-## TODO: Add crs match check
-
 for (i in 1:length(report_list)){
   r <- report_list[i]
   gdb <- paste0(root_data_dir, r, "/", 'hcsa_digitization.gdb')
   fc <- st_read(gdb, layer = 'conservation_areas')
+  fc <- st_transform(fc, "EPSG:4326")
   fc$code = r
   conservation_areas[[i]] <- fc
 }
@@ -107,7 +96,42 @@ hcs_df <- conservation_areas_binded %>%
   filter(HCS == TRUE) %>% 
   select(code, HCS, Shape)
 
-## TODO? Add clip based on concession boundaries?
+## TODO: Add clip based on concession boundaries?
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Merge GAR data --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+conservation_areas <- list()
+
+gar_data_dir <- 'remote/1_original/gar_website/'
+
+gar_list <- list("hcsa_0002" = "PT. Persada Graha Mandiri/pgm",
+                 "hcsa_0040" = "PT. Paramitra Internusa Pratama/pip",
+                 "hcsa_0042" = "PT. Buana Adhitama/bat",
+                 "hcsa_0043" = "PT. Bangun Nusa Mandiri/bnm",
+                 "hcsa_0044" = "PT. Agrolestari Mandiri/amnl",
+                 "hcsa_0045" = "PT. Cahayanusa Gemilang/cng",
+                 "hcsa_0046" = "PT. Kencana Graha Permai/kgp",
+                 "hcsa_0047" = "PT. Mitrakarya Agroindo/mka",
+                 "hcsa_0049" = "PT. Aditunggal Mahajaya/atm",
+                 "hcsa_0050" = "PT. Tapian Nadenggan/tnd",
+                 "hcsa_0051" = "PT. Agrokarya Primalestari/akpl",
+                 "hcsa_0052" = "PT. Kresna Duta Agroindo/kda",
+                 "hcsa_0053" = "PT. Binasawit Abadipratama/bap",
+                 "hcsa_0054" = "PT. Buana Artha Sejahtera/bas",
+                 "hcsa_0055" = "PT. Bumi Sawit Permai/bsp",
+                 "hcsa_0056" = "PT. Satya Kisma Usaha/sku",
+                 "hcsa_0179" = "PT. Kartika Prima Cipta/kpc")
+
+for (i in seq_along(gar_list)){
+  r <- gar_list[i]
+  shp_path <- paste0(gar_data_dir, r, "hcv.shp")
+  fc <- st_read(shp_path)
+  fc$code = names(gar_list[i])
+  conservation_areas[[i]] <- fc
+}
+
 
 
 # add data to the output file
@@ -116,27 +140,3 @@ merged_map <- conservation_areas_binded %>%
            layer = "conservation_areas",
            append = FALSE)
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# Open and merge digitized concession_boundaries--------------------------
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-r <- report_list[7]
-concession_boundaries <- list()
-
-for (i in 1:length(report_list)){
-  r <- report_list[i]
-  gdb <- paste0(root_data_dir, r, "/", 'hcsa_digitization.gdb')
-  fc <- st_read(gdb, layer = 'concession_boundaries')
-  concession_boundaries[[i]] <- fc
-}
-
-# turns the list into dataframes
-concession_boundaries_binded <- map_dfr(concession_boundaries, rbind)
-
-merged_map <- concession_boundaries_binded %>% 
-  st_write(out_file,
-           layer = "concession_boundaries",
-           append = FALSE)
-
-# Open merged_hcs.gpkg to check the dfs
-#merged_hcs <- st_read(out_file, layer = "concession_boundaries")
-merged_hcs <- st_read(out_file, layer = "conservation_areas")
