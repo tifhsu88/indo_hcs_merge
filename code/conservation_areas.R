@@ -80,6 +80,11 @@ for (i in 1:length(report_list)){
   fc <- st_read(gdb, layer = 'conservation_areas')
   fc <- st_transform(fc, "EPSG:4326")
   fc$code = r
+  
+  if (any(is.na(fc$conservation_type))){ 
+    stop(paste0("HCS/HCV label missing in concession ", r))
+  }
+  
   cel_hcs[[i]] <- fc
 }
 
