@@ -38,10 +38,11 @@ join_key = function(fc, key){
   if (any(is.na(fc$hcs))){ 
     stop("Land use label missing from strata key")
   }
-  
+
   return(fc)
 }
 
+'%ni%' <- function(x,y)!('%in%'(x,y))
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # CEL undergrad digitizing -----------------------------
@@ -107,7 +108,17 @@ cel_df <- cel_df %>%
 cel_df <- cel_df %>% 
   filter(!cel_df$Shape_Length == 0)
 
-## TODO: Identify concessions where we didn't make HCV
+# Identify concessions where we didn't map HCV
+have_hcv <- cel_df %>% 
+  st_drop_geometry() %>% 
+  filter(hcv==1) %>% 
+  pull(code) %>% 
+  unique()
+
+cel_df <- cel_df %>% 
+  mutate(hcv = ifelse(code %ni% have_hcv, -1, hcv), # For some concessions, we didn't digitize HCV. Want to explicitly include this in data.
+         hcs = ifelse((code == "hcsa_0008" & hcv==1), 2, hcs),
+         hcv = ifelse((code == "hcsa_0008" & hcs==1), 2, hcv))# For hcsa_0008, digitized map overlays HCV on top of HCS. As a result, somewhat hard to disambiguate.
 
 cel_df <- cel_df %>% 
   rename(geometry = Shape) %>%
@@ -141,7 +152,7 @@ for (i in seq_along(michael_list)){
   
   fc <- fc %>% 
     mutate(hcs = (HDF | MDF | LDF | YRF) %>% as.integer(),
-           hcv = NaN)
+           hcv = -1)
   
   michael_hcs[[i]] <- fc
 }
@@ -232,7 +243,7 @@ for (i in seq_along(app_list)){
   fc <- load_data(shp_path, code)
   fc <- join_key(fc, "AMG_LC")
   fc <- fc %>% 
-    mutate(hcv = NaN) %>% 
+    mutate(hcv = -1) %>% 
     select(code, hcs, hcv, geometry)
   app_hcs[[i]] <- fc
 }
@@ -252,7 +263,7 @@ fc <- load_data(shp_path, code)
 fc <- join_key(fc, "Strata")
 
 fc <- fc %>% 
-  mutate(hcv = NaN) %>% 
+  mutate(hcv = -1) %>% 
   select(code, hcs, hcv, geometry)
 cargill_boundaries[[1]] <- fc
 
@@ -279,7 +290,7 @@ for (i in seq_along(gh_list)){
   fc <- load_data(shp_path, code)
   fc <- fc %>% 
     mutate(hcs = 1,
-           hcv = NaN) %>% 
+           hcv = -1) %>% 
     select(code, hcs, hcv, geometry)
 
   gh_hcs[[i]] <- fc
@@ -295,20 +306,13 @@ gh_df <- map_dfr(gh_hcs, rbind)
 bound_df <- rbind(cel_df, michael_df, gar_df, app_df, cargill_df, gh_df)
 
 
-# add data to the output file
-merged_map <- conservation_areas_binded %>% 
-  st_write(out_file,
-           layer = "conservation_areas",
-           append = FALSE)
+# Convert multisurfaces (curved) into multipolygons (necessary for dissolve in next step - should confirm this isn't messing up the boundaries)
+bound_df <- bound_df %>% 
+  st_cast("MULTIPOLYGON")
 
-
-fc <- fc %>% 
+bound_df <- bound_df %>% 
   group_by(code, hcv, hcs) %>% 
   summarize()
-
-# Convert multisurfaces (curved) into multipolygons (necessary for some spatial operations in R)
-cel_df <-
-  cel_df %>% st_cast("MULTIPOLYGON")
 
 # # Dissolve into single HCS and HCV areas within each concession
 # cel_df <- cel_df %>% 
@@ -316,15 +320,19 @@ cel_df <-
 #   summarise()
 
 
-# Create separate hcv and hcs datasets
-cel_hcv <- cel_df %>% 
-  filter(HCV == TRUE) %>% 
-  select(code, HCV, Shape)
-cel_hcs <- cel_df %>% 
-  filter(HCS == TRUE) %>% 
-  select(code, HCS, Shape)
+# # Create separate hcv and hcs datasets
+# cel_hcv <- cel_df %>% 
+#   filter(HCV == TRUE) %>% 
+#   select(code, HCV, Shape)
+# cel_hcs <- cel_df %>% 
+#   filter(HCS == TRUE) %>% 
+#   select(code, HCS, Shape)
+
+## TODO: Try to clip by concession boundaries as a final check? 
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Export data --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+bound_df %>% 
+  write_sf("remote/4_merging/r_merge/conservation.shp")
