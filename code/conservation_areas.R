@@ -152,7 +152,8 @@ for (i in seq_along(michael_list)){
   
   fc <- fc %>% 
     mutate(hcs = (HDF | MDF | LDF | YRF) %>% as.integer(),
-           hcv = -1)
+           hcv = -1) %>% 
+    filter(hcs == 1)
   
   michael_hcs[[i]] <- fc
 }
@@ -244,7 +245,8 @@ for (i in seq_along(app_list)){
   fc <- join_key(fc, "AMG_LC")
   fc <- fc %>% 
     mutate(hcv = -1) %>% 
-    select(code, hcs, hcv, geometry)
+    select(code, hcs, hcv, geometry) %>% 
+    filter(hcs == 1)
   app_hcs[[i]] <- fc
 }
 
@@ -264,7 +266,8 @@ fc <- join_key(fc, "Strata")
 
 fc <- fc %>% 
   mutate(hcv = -1) %>% 
-  select(code, hcs, hcv, geometry)
+  select(code, hcs, hcv, geometry) %>% 
+  filter(hcs == 1)
 cargill_boundaries[[1]] <- fc
 
 # turns the list into dataframes
