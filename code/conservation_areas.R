@@ -181,7 +181,8 @@ for (i in seq_along(michael_list_gdb)){
   fc <- fc %>% 
     mutate(hcs = (area_type == "HCS") %>% as.integer(),
            hcv = -1) %>% 
-    filter(hcs == 1)
+    filter(hcs == 1) %>% 
+    rename(geometry = Shape)
   
   michael_hcs[[length(michael_list) + i]] <- fc
 }
