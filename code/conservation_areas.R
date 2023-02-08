@@ -29,6 +29,13 @@ load_data <- function(shp_path, code){
   return(fc)
 }
 
+load_lyr <- function(shp_path, lyr_name, code){
+  fc <- st_read(shp_path, layer = lyr_name)
+  fc$code = code
+  fc <- st_transform(fc, "EPSG:4326")
+  return(fc)
+}
+
 join_key = function(fc, key){
   fc <- fc %>% 
     rename("strata_code_data" = !!key) %>% 
@@ -77,10 +84,8 @@ cel_hcs <- list()
 for (i in 1:length(report_list)){
   r <- cel_list[i]
   gdb <- paste0(cel_data_dir, r, "/", 'hcsa_digitization.gdb')
-  fc <- st_read(gdb, layer = 'conservation_areas')
-  fc <- st_transform(fc, "EPSG:4326")
-  fc$code = r
-  
+  fc <- load_lyr(gdb, lyr_name = 'conservation_areas', code = r)
+
   if (any(is.na(fc$conservation_type))){ 
     stop(paste0("HCS/HCV label missing in concession ", r))
   }
@@ -142,12 +147,9 @@ cel_df <- cel_df %>%
 michael_hcs <- list()
 
 michael_data_dir <- 'remote/3_digitization/archive/digitization/'
-michael_list <- c("hcsa_0003" = 'hcsa0003_PT_Nabire_Baru_PT_Sariwana_Adi_Perkasa/hcsa0003_hcs_wgs84.shp',
+michael_list <- c("hcsa_0003" = 'hcsa0003_PT_Nabire_Baru_PT_Sariwana_Adi_Perkasa/hcsa0003_hcs_wgs84_all.shp',
                   "hcsa_0004" = 'hcsa0004_PT_Kalimantan_Prima_Argo_Mandiri/hcsa0004_hcs_wgs84.shp',
-                  "hcsa_0017" = 'hcsa0017_PT_Varia_Mitra_Andalan/hcsa0017_hcs_wgs84.shp', 
-                  "hcsa_0018" = 'hcsa0018_PT_Hungarindo_Persada/hcsa0018_hcs_wgs84.shp', 
-                  "hcsa_0019" = 'hcsa0019_PT_Gemilang_Makmur_Subur/hcsa0019_hcs_wgs84.shp',
-                  "hcsa_0026" = 'hcsa0026_PT_Tunas_Sawaerma/hcsa0026_hcs_wgs84.shp')
+                  "hcsa_0017" = 'hcsa0017_PT_Varia_Mitra_Andalan/hcsa0017_hcs_wgs84.shp')
 
 for (i in seq_along(michael_list)){
   r <- michael_list[i]
@@ -156,12 +158,34 @@ for (i in seq_along(michael_list)){
   fc <- load_data(shp_path, code)
   
   fc <- fc %>% 
-    mutate(hcs = (HDF | MDF | LDF | YRF) %>% as.integer(),
+    mutate(hcs = (area_type == "HCS") %>% as.integer(),
            hcv = -1) %>% 
     filter(hcs == 1)
   
   michael_hcs[[i]] <- fc
 }
+
+michael_list_gdb <- c("hcsa_0018" = 'hcsa0018_PT_Hungarindo_Persada/Arc_hcsa0018_PT_Hungarindo_Persada/hcsa0018.gdb', 
+                   "hcsa_0019" = 'hcsa0019_PT_Gemilang_Makmur_Subur/Arc_hcsa0019_PT_Gemilang_Makmur_Subur/hcsa_PT_Germilang_Makm.gdb',
+                   "hcsa_0026" = 'hcsa0026_PT_Tunas_Sawaerma/Arc_hcsa0026_PT_Tunas_Sawaerma/hcsa0026_PT_Tunas_Sawaerma.gdb')
+
+for (i in seq_along(michael_list_gdb)){
+  r <- michael_list_gdb[i]
+  code = names(michael_list_gdb[i])
+  gdb <- paste0(michael_data_dir, r)
+  lyr_name <- paste0(code %>% str_remove("_"), "_hcs_wgs84")
+  fc <- load_lyr(gdb, lyr_name = lyr_name, code = code)
+  
+  
+  
+  fc <- fc %>% 
+    mutate(hcs = (area_type == "HCS") %>% as.integer(),
+           hcv = -1) %>% 
+    filter(hcs == 1)
+  
+  michael_hcs[[length(michael_list) + i]] <- fc
+}
+
 
 # turns the list into dataframes
 michael_df <- map_dfr(michael_hcs, rbind)
@@ -344,3 +368,9 @@ bound_df <- bound_df %>%
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 bound_df %>% 
   write_sf("remote/4_merging/r_merge/conservation.shp")
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Add metadata --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
