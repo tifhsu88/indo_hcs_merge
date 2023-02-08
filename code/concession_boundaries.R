@@ -172,7 +172,6 @@ app_df <- map_dfr(app_boundaries, rbind)
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Cargill concession boundaries --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# cargill
 cargill_boundaries = list()
 code = "hcsa_0085"
 shp_path = 'remote/1_original/cargill/PT_STAL/Spatial_Data/Area_STAL.shp'
