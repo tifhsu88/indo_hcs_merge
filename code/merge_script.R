@@ -82,12 +82,8 @@ for (i in 1:length(report_list)){
   cel_hcs[[i]] <- fc
 }
 
-# turns the list into dataframes
-#conservation_areas_binded <- map_dfr(conservation_areas, rbind)
-
-# separate HCS and HCV columns 
+# convert list to dataframe
 cel_df <- cel_hcs %>%
-  # convert list to dataframe
   map_dfr(rbind) 
 
 cel_df <- cel_df %>%
@@ -111,6 +107,11 @@ cel_df <- cel_df %>%
 cel_df <- cel_df %>% 
   filter(!cel_df$Shape_Length == 0)
 
+## TODO: Identify concessions where we didn't make HCV
+
+cel_df <- cel_df %>% 
+  rename(geometry = Shape) %>%
+  select(code, hcs, hcv, geometry)
 
 # ## Clip based on concession boundaries
 # cel_bounds <- boundaries_df %>% 
