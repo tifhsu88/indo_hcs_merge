@@ -42,7 +42,7 @@ report_list <- c('hcsa_0005',
 out_file <- 'remote/4_merging/hcsa_merging/merged_hcs.gpkg'
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# Open and merge digitized conservation_areas-----------------------------
+# CEL undergrad digitizing -----------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # r <- report_list[7]
 conservation_areas <- list()
@@ -100,7 +100,12 @@ hcs_df <- conservation_areas_binded %>%
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# Merge GAR data --------------------------
+# Michael digitizing -----------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# GAR original data --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 conservation_areas <- list()
 
@@ -114,6 +119,7 @@ gar_list <- list("hcsa_0002" = "PT. Persada Graha Mandiri/pgm",
                  "hcsa_0045" = "PT. Cahayanusa Gemilang/cng",
                  "hcsa_0046" = "PT. Kencana Graha Permai/kgp",
                  "hcsa_0047" = "PT. Mitrakarya Agroindo/mka",
+                 "hcsa_0048" = "PT. Agrolestari Sentosa/als",
                  "hcsa_0049" = "PT. Aditunggal Mahajaya/atm",
                  "hcsa_0050" = "PT. Tapian Nadenggan/tnd",
                  "hcsa_0051" = "PT. Agrokarya Primalestari/akpl",
@@ -140,3 +146,38 @@ merged_map <- conservation_areas_binded %>%
            layer = "conservation_areas",
            append = FALSE)
 
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# APP original data --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Cargill original data --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Goodhope original data --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+gh_conservation <- list()
+
+gh_data_dir <- 'remote/1_original/goodhope/'
+gh_list <- list("hcsa_0029" = "AWL-KMS/Patch Process_HCS/Step_8_sd_14_HCS_Area.shp",
+                "hcsa_0030" = "Ketapang/Shapefile HCS_PT AJB-BMS-SMS 14 Aug 2018/Shpefile HCS_14 Aug 2018/AJB_BMS_SMS_Patch_Class_v6_140718.shp")
+
+for (i in seq_along(gh_list)){
+  r <- gh_list[i]
+  shp_path <- paste0(gh_data_dir, r)
+  fc <- st_read(shp_path)
+  fc <- st_transform(fc, "EPSG:4326")
+  fc$code = names(gh_list[i])
+  gh_boundaries[[i]] <- fc
+}
+
+# turns the list into dataframes
+gh_df <- map_dfr(gh_boundaries, rbind)
+
+# reduce to minimum attributes
+gh_df <- gh_df %>% 
+  select(code, geometry)
