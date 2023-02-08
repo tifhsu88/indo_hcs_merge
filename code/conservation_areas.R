@@ -134,11 +134,6 @@ cel_df <- cel_df %>%
   rename(geometry = Shape) %>%
   select(code, hcs, hcv, geometry)
 
-# ## Clip based on concession boundaries
-# cel_bounds <- boundaries_df %>% 
-#   filter(code %in% cel_list)
-# 
-# test <- cel_df  %>%  st_intersection(cel_bounds)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Michael digitizing -----------------------------
@@ -194,6 +189,8 @@ michael_df <- map_dfr(michael_hcs, rbind)
 # reduce to minimum attributes
 michael_df <- michael_df %>% 
   select(code, geometry, hcs, hcv)
+
+
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -284,6 +281,8 @@ for (i in seq_along(app_list)){
 app_df <- map_dfr(app_hcs, rbind)
 
 
+
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Cargill original data --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -336,14 +335,14 @@ gh_df <- map_dfr(gh_hcs, rbind)
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Combine and clean data --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-bound_df <- rbind(cel_df, michael_df, gar_df, app_df, cargill_df, gh_df)
+hcs_df <- rbind(cel_df, michael_df, gar_df, app_df, cargill_df, gh_df)
 
 
 # Convert multisurfaces (curved) into multipolygons (necessary for dissolve in next step - should confirm this isn't messing up the boundaries)
-bound_df <- bound_df %>% 
+hcs_df <- hcs_df %>% 
   st_cast("MULTIPOLYGON")
 
-bound_df <- bound_df %>% 
+hcs_df <- hcs_df %>% 
   group_by(code, hcv, hcs) %>% 
   summarize()
 
@@ -361,7 +360,31 @@ bound_df <- bound_df %>%
 #   filter(HCS == TRUE) %>% 
 #   select(code, HCS, Shape)
 
-## TODO: Try to clip by concession boundaries as a final check? 
+
+# ## TODO: Clip by concession boundaries as a final check? 
+# # ## Clip based on concession boundaries
+# michael_codes <- michael_df$code %>% unique()
+# for i in length(michael_codes]){
+#   code <- michael_codes[i]
+#   print(code)
+#   bounds <- boundaries_df %>% 
+#     filter(code == code)
+#   # %>% 
+#   #   st_transform("EPSG:23835")
+#   hcs_subset <- hcs_df %>% 
+#     filter(code == code)
+#   # %>% 
+#   #   st_transform("EPSG:23835")
+#   hcs_subset <- hcs_subset %>% 
+#     st_intersection(bounds)
+#   hcs_subset_list[[i]] <- hcs_subset 
+# }
+# 
+# bounds <- boundaries_df %>%
+#   filter(code %in% cel_list)
+# 
+# test <- bound_df  %>%  st_intersection(cel_bounds)
+
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
