@@ -10,11 +10,44 @@ library(sf)
 # hcsa_0083_gdb <- "remote/3_digitization/2022_digitization/hcsa_0083/hcsa_digitization.gdb"
 # hcsa_0083_fc <- st_read(hcsa_0083_gdb, layer = 'conservation_areas') # Since geodatabase contains multiple layers, need to specify which one you want to open
 
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# Define paths -----------------------------------------------------------
-#%%%%%%%%%%%%a%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-root_data_dir <- 'remote/3_digitization/2022_digitization/'
-report_list <- c('hcsa_0005',
+# Load supplementary data --------------------------------------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+boundaries_df <- st_read("remote/4_merging/r_merge/boundaries.shp")
+
+strata_key <- read_csv("remote/1_original/company_strata_key.csv") %>% 
+  select(strata_code_data, strata_code_eng, description, code_simpl)
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Define helper functions --------------------------------------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+load_data <- function(shp_path, code){
+  fc <- st_read(shp_path)
+  fc$code = code
+  fc <- st_transform(fc, "EPSG:4326")
+  return(fc)
+}
+
+join_key = function(fc, key){
+  fc <- fc %>% 
+    rename("strata_code_data" = !!key) %>% 
+    left_join(strata_key, by = "strata_code_data") %>% 
+    rename(hcs = code_simpl)
+  
+  if (any(is.na(fc$hcs))){ 
+    stop("Land use label missing from strata key")
+  }
+  
+  return(fc)
+}
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# CEL undergrad digitizing -----------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+cel_data_dir <- 'remote/3_digitization/2022_digitization/'
+cel_list <- c('hcsa_0005',
                  'hcsa_0006',
                  'hcsa_0008', # Note - some ambiguity between HCS/HCV areas in maps.
                  'hcsa_0010', # Note - uses HCSA give and take. We digitized pre give-and-take HCS map
@@ -22,7 +55,7 @@ report_list <- c('hcsa_0005',
                  'hcsa_0012',
                  'hcsa_0013',
                  'hcsa_0014',
-                 # 'hcsa_0015', #
+                 'hcsa_0015',
                  'hcsa_0020',
                  'hcsa_0021',
                  'hcsa_0023',
@@ -38,79 +71,97 @@ report_list <- c('hcsa_0005',
                  'hcsa_0170')
 
 
-# Output path for new, merged dataset
-out_file <- 'remote/4_merging/hcsa_merging/merged_hcs.gpkg'
-
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# CEL undergrad digitizing -----------------------------
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# r <- report_list[7]
-conservation_areas <- list()
+cel_hcs <- list()
 
 for (i in 1:length(report_list)){
-  r <- report_list[i]
-  gdb <- paste0(root_data_dir, r, "/", 'hcsa_digitization.gdb')
+  r <- cel_list[i]
+  gdb <- paste0(cel_data_dir, r, "/", 'hcsa_digitization.gdb')
   fc <- st_read(gdb, layer = 'conservation_areas')
   fc <- st_transform(fc, "EPSG:4326")
   fc$code = r
-  conservation_areas[[i]] <- fc
+  cel_hcs[[i]] <- fc
 }
 
 # turns the list into dataframes
 #conservation_areas_binded <- map_dfr(conservation_areas, rbind)
 
 # separate HCS and HCV columns 
-conservation_areas_binded <- conservation_areas %>%
+cel_df <- cel_hcs %>%
   # convert list to dataframe
   map_dfr(rbind) 
 
-conservation_areas_binded <- conservation_areas_binded %>%
+cel_df <- cel_df %>%
   # separate HCS and HCV columns based on conservation_type
-  mutate(HCS = case_when(
-    conservation_type == "HCV only" ~ FALSE,
-    conservation_type == "HCS only" ~ TRUE,
-    conservation_type == "HCV AND HCS" ~ TRUE,
-    conservation_type == "HCV OR HCS" ~ TRUE # NOTE: Somewhat arbitrary decision to assign this to both
+  mutate(hcs = case_when(
+    conservation_type == "HCV only" ~ 0,
+    conservation_type == "HCS only" ~ 1,
+    conservation_type == "HCV AND HCS" ~ 1,
+    conservation_type == "HCV OR HCS" ~ 2 # NOTE: Category 2 is an uncertain class. Flags that an area is labeled as HCS/HCV but without specificity
   )) %>% 
-  mutate(HCV = case_when(
-    conservation_type == "HCV only" ~ TRUE,
-    conservation_type == "HCS only" ~ FALSE,
-    conservation_type == "HCV AND HCS" ~ TRUE,
-    conservation_type == "HCV OR HCS" ~ TRUE # NOTE: Somewhat arbitrary decision to assign this to both
+  mutate(hcv = case_when(
+    conservation_type == "HCV only" ~ 1,
+    conservation_type == "HCS only" ~ 0,
+    conservation_type == "HCV AND HCS" ~ 1,
+    conservation_type == "HCV OR HCS" ~ 2 # NOTE: Category 2 is an uncertain class. Flags that an area is labeled as HCS/HCV but without specificity
     )) %>% 
   # drop conservation_type_column
   select(-conservation_type)
 
 # Drop 4 empty features in hcsa_0034
-conservation_areas_binded %>% filter(!conservation_areas_binded$Shape_Length == 0)
+cel_df <- cel_df %>% 
+  filter(!cel_df$Shape_Length == 0)
 
-# # Convert multisurfaces (curved) into multipolygons
-# conservation_areas_binded <- 
-#   conservation_areas_binded %>% st_cast("MULTIPOLYGON")
 
-# Create separate hcv and hcs datasets
-hcv_df <- conservation_areas_binded %>% 
-  filter(HCV == TRUE) %>% 
-  select(code, HCV, Shape)
-hcs_df <- conservation_areas_binded %>% 
-  filter(HCS == TRUE) %>% 
-  select(code, HCS, Shape)
-
-## TODO: Add clip based on concession boundaries?
-
+# ## Clip based on concession boundaries
+# cel_bounds <- boundaries_df %>% 
+#   filter(code %in% cel_list)
+# 
+# test <- cel_df  %>%  st_intersection(cel_bounds)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Michael digitizing -----------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+## NOTE: Michael only digitized HCS areas
+michael_hcs <- list()
+
+michael_data_dir <- 'remote/3_digitization/archive/digitization/'
+michael_list <- c("hcsa_0003" = 'hcsa0003_PT_Nabire_Baru_PT_Sariwana_Adi_Perkasa/hcsa0003_hcs_wgs84.shp',
+                  "hcsa_0004" = 'hcsa0004_PT_Kalimantan_Prima_Argo_Mandiri/hcsa0004_hcs_wgs84.shp',
+                  "hcsa_0017" = 'hcsa0017_PT_Varia_Mitra_Andalan/hcsa0017_hcs_wgs84.shp', 
+                  "hcsa_0018" = 'hcsa0018_PT_Hungarindo_Persada/hcsa0018_hcs_wgs84.shp', 
+                  "hcsa_0019" = 'hcsa0019_PT_Gemilang_Makmur_Subur/hcsa0019_hcs_wgs84.shp',
+                  "hcsa_0026" = 'hcsa0026_PT_Tunas_Sawaerma/hcsa0026_hcs_wgs84.shp')
+
+for (i in seq_along(michael_list)){
+  r <- michael_list[i]
+  shp_path <- paste0(michael_data_dir, r)
+  code = names(michael_list[i])
+  fc <- load_data(shp_path, code)
+  
+  fc <- fc %>% 
+    mutate(hcs = (HDF | MDF | LDF | YRF) %>% as.integer(),
+           hcv = NaN)
+  
+  michael_hcs[[i]] <- fc
+}
+
+# turns the list into dataframes
+michael_df <- map_dfr(michael_hcs, rbind)
+
+# reduce to minimum attributes
+michael_df <- michael_df %>% 
+  select(code, geometry, hcs, hcv)
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # GAR original data --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-conservation_areas <- list()
+## NOTE: GAR data doesn't allow the same location to be both HCV and HCS.
+## Lots of HCS areas are marked as HCV and, as a result, aren't included 
+## in the HCS layers. Probably need to use combined HCV / HCS
+gar_hcs <- list()
 
 gar_data_dir <- 'remote/1_original/gar_website/'
-
 gar_list <- list("hcsa_0002" = "PT. Persada Graha Mandiri/pgm",
                  "hcsa_0040" = "PT. Paramitra Internusa Pratama/pip",
                  "hcsa_0042" = "PT. Buana Adhitama/bat",
@@ -130,14 +181,117 @@ gar_list <- list("hcsa_0002" = "PT. Persada Graha Mandiri/pgm",
                  "hcsa_0056" = "PT. Satya Kisma Usaha/sku",
                  "hcsa_0179" = "PT. Kartika Prima Cipta/kpc")
 
+
+
 for (i in seq_along(gar_list)){
+  code <- names(gar_list[i])
   r <- gar_list[i]
+  
   shp_path <- paste0(gar_data_dir, r, "hcv.shp")
-  fc <- st_read(shp_path)
-  fc$code = names(gar_list[i])
-  conservation_areas[[i]] <- fc
+  hcv_fc <- load_data(shp_path, code)
+  hcv_fc <- hcv_fc %>% 
+    mutate(hcv = 1, 
+           hcs = 2) %>% 
+    select(code, geometry, hcv, hcs)
+    
+  shp_path <- paste0(gar_data_dir, r, "hcs.shp")
+  hcs_fc <- load_data(shp_path, code)
+  hcs_fc <- hcs_fc %>% 
+    mutate(hcv = 2,
+           hcs = 1) %>% 
+    select(code, geometry, hcv, hcs)
+    
+  fc <- rbind(hcv_fc, hcs_fc)
+
+  gar_hcs[[i]] <- fc
 }
 
+# turns the list into dataframes
+gar_df <- map_dfr(gar_hcs, rbind)
+
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# APP original data --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+## NOTE: don't have any HCV data for APP
+app_hcs <- list()
+app_data_dir <- 'remote/1_original/app/stratified_shapefiles/'
+app_list <- list("hcsa_0001" = "Muba_BPP2_Stratification.shp",
+                 "hcsa_0035" = "Jambi_WKS_Stratification.shp",
+                 "hcsa_0036" = "Kalbar_DTK_Stratification.shp",
+                 "hcsa_0037" = "Kaltim_KHL_Stratification.shp",
+                 "hcsa_0038" = "OKI_BMH_Stratification.shp",
+                 "hcsa_0039" = "Riau_MSK_SK_Stratification.shp")
+
+for (i in seq_along(app_list)){
+  r <- app_list[i]
+  shp_path <- paste0(app_data_dir, r)
+  code = names(app_list[i])
+  fc <- load_data(shp_path, code)
+  fc <- join_key(fc, "AMG_LC")
+  fc <- fc %>% 
+    mutate(hcv = NaN) %>% 
+    select(code, hcs, hcv, geometry)
+  app_hcs[[i]] <- fc
+}
+
+# turns the list into dataframes
+app_df <- map_dfr(app_hcs, rbind)
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Cargill original data --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+## NOTE: don't have any HCV data for Cargill
+cargill_boundaries = list()
+code = "hcsa_0085"
+shp_path = 'remote/1_original/cargill/PT_STAL/Spatial_Data/Final _Strata.shp'
+fc <- load_data(shp_path, code)
+fc <- join_key(fc, "Strata")
+
+fc <- fc %>% 
+  mutate(hcv = NaN) %>% 
+  select(code, hcs, hcv, geometry)
+cargill_boundaries[[1]] <- fc
+
+# turns the list into dataframes
+cargill_df <- map_dfr(cargill_boundaries, rbind)
+
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Goodhope original data --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+## NOTE: don't have any HCV data for Goodhope. All polygons are HCS
+
+gh_hcs <- list()
+
+gh_data_dir <- 'remote/1_original/goodhope/'
+gh_list <- list("hcsa_0029" = "AWL-KMS/Patch Process_HCS/Step_8_sd_14_HCS_Area.shp",
+                "hcsa_0030" = "Ketapang/Shapefile HCS_PT AJB-BMS-SMS 14 Aug 2018/Shpefile HCS_14 Aug 2018/AJB_BMS_SMS_Patch_Class_v6_140718.shp")
+
+for (i in seq_along(gh_list)){
+  r <- gh_list[i]
+  shp_path <- paste0(gh_data_dir, r)
+  code = names(gh_list[i])
+  fc <- load_data(shp_path, code)
+  fc <- fc %>% 
+    mutate(hcs = 1,
+           hcv = NaN) %>% 
+    select(code, hcs, hcv, geometry)
+
+  gh_hcs[[i]] <- fc
+}
+
+# turns the list into dataframes
+gh_df <- map_dfr(gh_hcs, rbind)
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Combine and clean data --------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+bound_df <- rbind(cel_df, michael_df, gar_df, app_df, cargill_df, gh_df)
 
 
 # add data to the output file
@@ -147,37 +301,29 @@ merged_map <- conservation_areas_binded %>%
            append = FALSE)
 
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# APP original data --------------------------
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+fc <- fc %>% 
+  group_by(code, hcv, hcs) %>% 
+  summarize()
+
+# Convert multisurfaces (curved) into multipolygons (necessary for some spatial operations in R)
+cel_df <-
+  cel_df %>% st_cast("MULTIPOLYGON")
+
+# # Dissolve into single HCS and HCV areas within each concession
+# cel_df <- cel_df %>% 
+#   group_by(code, HCS, HCV) %>% 
+#   summarise()
+
+
+# Create separate hcv and hcs datasets
+cel_hcv <- cel_df %>% 
+  filter(HCV == TRUE) %>% 
+  select(code, HCV, Shape)
+cel_hcs <- cel_df %>% 
+  filter(HCS == TRUE) %>% 
+  select(code, HCS, Shape)
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# Cargill original data --------------------------
+# Export data --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# Goodhope original data --------------------------
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-gh_conservation <- list()
-
-gh_data_dir <- 'remote/1_original/goodhope/'
-gh_list <- list("hcsa_0029" = "AWL-KMS/Patch Process_HCS/Step_8_sd_14_HCS_Area.shp",
-                "hcsa_0030" = "Ketapang/Shapefile HCS_PT AJB-BMS-SMS 14 Aug 2018/Shpefile HCS_14 Aug 2018/AJB_BMS_SMS_Patch_Class_v6_140718.shp")
-
-for (i in seq_along(gh_list)){
-  r <- gh_list[i]
-  shp_path <- paste0(gh_data_dir, r)
-  fc <- st_read(shp_path)
-  fc <- st_transform(fc, "EPSG:4326")
-  fc$code = names(gh_list[i])
-  gh_boundaries[[i]] <- fc
-}
-
-# turns the list into dataframes
-gh_df <- map_dfr(gh_boundaries, rbind)
-
-# reduce to minimum attributes
-gh_df <- gh_df %>% 
-  select(code, geometry)
