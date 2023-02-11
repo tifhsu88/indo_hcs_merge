@@ -393,6 +393,8 @@ hcs_df <- hcs_df %>%
 bound_df %>% 
   write_sf("remote/4_merging/r_merge/conservation.shp")
 
+## Note - after running, I run a clip in arcGIS to clip conservation areas to concession boundaries.
+
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Add metadata --------------------------
