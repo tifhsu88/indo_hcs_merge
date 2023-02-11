@@ -14,8 +14,8 @@ library(sf)
 cel_data_dir <- 'remote/3_digitization/2022_digitization/'
 cel_list <- c('hcsa_0005',
               'hcsa_0006',
-              'hcsa_0008', # Note - some ambiguity between HCS/HCV areas in maps.
-              'hcsa_0010', # Note - uses HCSA give and take. We digitized pre give-and-take HCS map
+              'hcsa_0008',
+              'hcsa_0010',
               'hcsa_0011',
               'hcsa_0012',
               'hcsa_0013',
@@ -27,6 +27,7 @@ cel_list <- c('hcsa_0005',
               'hcsa_0024',
               'hcsa_0025',
               'hcsa_0027',
+              'hcsa_0030', # Note - just concession boundary, digitized to complement goodhope data
               'hcsa_0034',
               'hcsa_0083', 
               'hcsa_0146', 
@@ -192,13 +193,27 @@ cargill_df <- map_dfr(cargill_boundaries, rbind)
 # Goodhope concession boundaries --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ## Goodhope only provided shapefile of HCS area, not concession boundaries.
-## Might need to go back and digitize boundaries...
+## Digitized one (in CEL code above) and pulled one from Kim's digitization (added here)
+gh_boundaries = list()
+code = "hcsa_0029"
+shp_path = 'remote/1_original/goodhope/Ketapang/hcsa_0029_boundary_kim.shp'
+fc <- st_read(shp_path)
+fc <- st_transform(fc, "EPSG:4326")
+fc$code = code
+fc <- fc %>% 
+  select(code, geometry) %>% 
+  group_by(code) %>% 
+  summarize()
+gh_boundaries[[1]] <- fc
+
+# turns the list into dataframes
+gh_df <- map_dfr(gh_boundaries, rbind)
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Combine concession boundaries and export --------------------------
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-bound_df <- rbind(cel_df, michael_df, gar_df, app_df, cargill_df)
+bound_df <- rbind(cel_df, michael_df, gar_df, app_df, cargill_df, gh_df)
 
 bound_df %>% 
   write_sf("remote/4_merging/r_merge/boundaries.shp")
